@@ -46,7 +46,7 @@ typedef struct {
 
 static switch_bool_t tdd_encode_callback(switch_media_bug_t *bug, void *user_data, switch_abc_type_t type)
 {
-	switch_tdd_t *pvt = (switch_tdd_t *) user_data;
+	switch_tdd_t *pvt = (switch_tdd_t *)user_data;
 	switch_frame_t *frame = NULL;
 	switch_bool_t r = SWITCH_TRUE;
 
@@ -55,18 +55,14 @@ static switch_bool_t tdd_encode_callback(switch_media_bug_t *bug, void *user_dat
 		break;
 	}
 	case SWITCH_ABC_TYPE_CLOSE:
-		if (pvt->tdd_state) {
-			v18_free(pvt->tdd_state);
-		}
+		if (pvt->tdd_state) { v18_free(pvt->tdd_state); }
 		break;
 	case SWITCH_ABC_TYPE_WRITE_REPLACE:
 		if ((frame = switch_core_media_bug_get_write_replace_frame(bug))) {
 			int len;
 
 			if (pvt->tail_lead) {
-				if (!--pvt->tail_lead) {
-					r = SWITCH_FALSE;
-				}
+				if (!--pvt->tail_lead) { r = SWITCH_FALSE; }
 				memset(frame->data, 0, frame->datalen);
 
 			} else if (pvt->head_lead) {
@@ -75,9 +71,7 @@ static switch_bool_t tdd_encode_callback(switch_media_bug_t *bug, void *user_dat
 			} else {
 				len = v18_tx(pvt->tdd_state, frame->data, frame->samples);
 
-				if (!len) {
-					pvt->tail_lead = TDD_LEAD;
-				}
+				if (!len) { pvt->tail_lead = TDD_LEAD; }
 			}
 
 			switch_core_media_bug_set_write_replace_frame(bug, frame);
@@ -106,14 +100,12 @@ switch_status_t spandsp_stop_tdd_encode_session(switch_core_session_t *session)
 
 static void put_text_msg(void *user_data, const uint8_t *msg, int len)
 {
-	switch_tdd_t *pvt = (switch_tdd_t *) user_data;
+	switch_tdd_t *pvt = (switch_tdd_t *)user_data;
 	switch_event_t *event, *clone;
 	switch_channel_t *channel = switch_core_session_get_channel(pvt->session);
 	switch_core_session_t *other_session;
 
-
 	switch_channel_add_variable_var_check(channel, "tdd_messages", (char *)msg, SWITCH_FALSE, SWITCH_STACK_PUSH);
-
 
 	if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, MY_EVENT_TDD_RECV_MESSAGE) == SWITCH_STATUS_SUCCESS) {
 
@@ -121,7 +113,8 @@ static void put_text_msg(void *user_data, const uint8_t *msg, int len)
 		switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "proto", "tdd");
 		switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "subject", "TDD MESSAGE");
 		switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "TDD-Data", (char *)msg);
-		switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Unique-ID", switch_core_session_get_uuid(pvt->session));
+		switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Unique-ID",
+									   switch_core_session_get_uuid(pvt->session));
 		switch_event_add_body(event, "%s\n\n", (char *)msg);
 
 		if (switch_core_session_get_partner(pvt->session, &other_session) == SWITCH_STATUS_SUCCESS) {
@@ -144,25 +137,23 @@ static void put_text_msg(void *user_data, const uint8_t *msg, int len)
 		}
 
 		switch_event_fire(&event);
-
-
 	}
 
-	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(pvt->session), SWITCH_LOG_DEBUG, "%s got TDD Message [%s]\n", switch_channel_get_name(channel), (char *)msg);
-
+	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(pvt->session), SWITCH_LOG_DEBUG, "%s got TDD Message [%s]\n",
+					  switch_channel_get_name(channel), (char *)msg);
 }
 
 static int get_v18_mode(switch_core_session_t *session)
 {
 	switch_channel_t *channel = switch_core_session_get_channel(session);
 	const char *var;
-	int r = V18_MODE_5BIT_4545;
+	int r = V18_MODE_WEITBRECHT_5BIT_4545;
 
 	if ((var = switch_channel_get_variable(channel, "v18_mode"))) {
 		if (!strcasecmp(var, "5BIT_45") || !strcasecmp(var, "baudot")) {
-			r = V18_MODE_5BIT_4545;
+			r = V18_MODE_WEITBRECHT_5BIT_4545;
 		} else if (!strcasecmp(var, "5BIT_50")) {
-			r = V18_MODE_5BIT_50;
+			r = V18_MODE_WEITBRECHT_5BIT_50;
 		} else if (!strcasecmp(var, "DTMF")) {
 			r = V18_MODE_DTMF;
 		} else if (!strcasecmp(var, "EDT")) {
@@ -181,59 +172,46 @@ static int get_v18_mode(switch_core_session_t *session)
 	return r;
 }
 
-
 switch_status_t spandsp_tdd_send_session(switch_core_session_t *session, const char *text)
 {
 	v18_state_t *tdd_state;
-	switch_frame_t *read_frame, write_frame = { 0 };
+	switch_frame_t *read_frame, write_frame = {0};
 	uint8_t write_buf[SWITCH_RECOMMENDED_BUFFER_SIZE];
-	switch_codec_implementation_t read_impl = { 0 };
-	switch_codec_t write_codec = { 0 };
+	switch_codec_implementation_t read_impl = {0};
+	switch_codec_t write_codec = {0};
 	switch_channel_t *channel = switch_core_session_get_channel(session);
 	switch_status_t status;
 
 	switch_core_session_get_read_impl(session, &read_impl);
 
-	if (switch_core_codec_init(&write_codec,
-                               "L16",
-                               NULL,
-                               NULL,
-                               read_impl.actual_samples_per_second,
-                               read_impl.microseconds_per_packet / 1000,
-                               read_impl.number_of_channels,
-                               SWITCH_CODEC_FLAG_ENCODE | SWITCH_CODEC_FLAG_DECODE, NULL,
-                               switch_core_session_get_pool(session)) == SWITCH_STATUS_SUCCESS) {
-        write_frame.data = write_buf;
-        write_frame.buflen = sizeof(write_buf);
-        write_frame.datalen = read_impl.decoded_bytes_per_packet;
-        write_frame.samples = write_frame.datalen / 2;
-        write_frame.codec = &write_codec;
+	if (switch_core_codec_init(&write_codec, "L16", NULL, NULL, read_impl.actual_samples_per_second,
+							   read_impl.microseconds_per_packet / 1000, read_impl.number_of_channels,
+							   SWITCH_CODEC_FLAG_ENCODE | SWITCH_CODEC_FLAG_DECODE, NULL,
+							   switch_core_session_get_pool(session)) == SWITCH_STATUS_SUCCESS) {
+		write_frame.data = write_buf;
+		write_frame.buflen = sizeof(write_buf);
+		write_frame.datalen = read_impl.decoded_bytes_per_packet;
+		write_frame.samples = write_frame.datalen / 2;
+		write_frame.codec = &write_codec;
 		switch_core_session_set_read_codec(session, &write_codec);
 	} else {
 		return SWITCH_STATUS_FALSE;
 	}
 
-	tdd_state = v18_init(NULL, TRUE, get_v18_mode(session), V18_AUTOMODING_GLOBAL, put_text_msg, NULL);
-
+	tdd_state = v18_init(NULL, TRUE, get_v18_mode(session), V18_AUTOMODING_GLOBAL, put_text_msg, NULL, NULL, NULL);
 
 	v18_put(tdd_state, text, -1);
 
-	while(switch_channel_ready(channel)) {
+	while (switch_channel_ready(channel)) {
 		status = switch_core_session_read_frame(session, &read_frame, SWITCH_IO_FLAG_NONE, 0);
 
-		if (!SWITCH_READ_ACCEPTABLE(status)) {
-			break;
-		}
+		if (!SWITCH_READ_ACCEPTABLE(status)) { break; }
 
-
-		if (!v18_tx(tdd_state, (void *)write_buf, write_frame.samples)) {
-			break;
-		}
+		if (!v18_tx(tdd_state, (void *)write_buf, write_frame.samples)) { break; }
 
 		if (switch_core_session_write_frame(session, &write_frame, SWITCH_IO_FLAG_NONE, 0) != SWITCH_STATUS_SUCCESS) {
 			break;
 		}
-
 	}
 
 	switch_core_codec_destroy(&write_codec);
@@ -244,29 +222,26 @@ switch_status_t spandsp_tdd_send_session(switch_core_session_t *session, const c
 	return SWITCH_STATUS_SUCCESS;
 }
 
-
 switch_status_t spandsp_tdd_encode_session(switch_core_session_t *session, const char *text)
 {
 	switch_channel_t *channel = switch_core_session_get_channel(session);
 	switch_media_bug_t *bug;
 	switch_status_t status;
 	switch_tdd_t *pvt;
-	//switch_codec_implementation_t read_impl = { 0 };
+	// switch_codec_implementation_t read_impl = { 0 };
 
-	//switch_core_session_get_read_impl(session, &read_impl);
+	// switch_core_session_get_read_impl(session, &read_impl);
 
-	if (!(pvt = switch_core_session_alloc(session, sizeof(*pvt)))) {
-		return SWITCH_STATUS_MEMERR;
-	}
+	if (!(pvt = switch_core_session_alloc(session, sizeof(*pvt)))) { return SWITCH_STATUS_MEMERR; }
 
 	pvt->session = session;
-	pvt->tdd_state = v18_init(NULL, TRUE, get_v18_mode(session), V18_AUTOMODING_GLOBAL, put_text_msg, NULL);
+	pvt->tdd_state = v18_init(NULL, TRUE, get_v18_mode(session), V18_AUTOMODING_GLOBAL, put_text_msg, NULL, NULL, NULL);
 	pvt->head_lead = TDD_LEAD;
 
 	v18_put(pvt->tdd_state, text, -1);
 
-	if ((status = switch_core_media_bug_add(session, "spandsp_tdd_encode", NULL,
-						tdd_encode_callback, pvt, 0, SMBF_WRITE_REPLACE | SMBF_NO_PAUSE, &bug)) != SWITCH_STATUS_SUCCESS) {
+	if ((status = switch_core_media_bug_add(session, "spandsp_tdd_encode", NULL, tdd_encode_callback, pvt, 0,
+											SMBF_WRITE_REPLACE | SMBF_NO_PAUSE, &bug)) != SWITCH_STATUS_SUCCESS) {
 		v18_free(pvt->tdd_state);
 		return status;
 	}
@@ -276,12 +251,10 @@ switch_status_t spandsp_tdd_encode_session(switch_core_session_t *session, const
 	return SWITCH_STATUS_SUCCESS;
 }
 
-
-
-///XXX
+/// XXX
 static switch_bool_t tdd_decode_callback(switch_media_bug_t *bug, void *user_data, switch_abc_type_t type)
 {
-	switch_tdd_t *pvt = (switch_tdd_t *) user_data;
+	switch_tdd_t *pvt = (switch_tdd_t *)user_data;
 	switch_frame_t *frame = NULL;
 	switch_bool_t r = SWITCH_TRUE;
 
@@ -290,9 +263,7 @@ static switch_bool_t tdd_decode_callback(switch_media_bug_t *bug, void *user_dat
 		break;
 	}
 	case SWITCH_ABC_TYPE_CLOSE:
-		if (pvt->tdd_state) {
-			v18_free(pvt->tdd_state);
-		}
+		if (pvt->tdd_state) { v18_free(pvt->tdd_state); }
 		break;
 	case SWITCH_ABC_TYPE_READ_REPLACE:
 		if ((frame = switch_core_media_bug_get_read_replace_frame(bug))) {
@@ -329,19 +300,17 @@ switch_status_t spandsp_tdd_decode_session(switch_core_session_t *session)
 	switch_media_bug_t *bug;
 	switch_status_t status;
 	switch_tdd_t *pvt;
-	//switch_codec_implementation_t read_impl = { 0 };
+	// switch_codec_implementation_t read_impl = { 0 };
 
-	//switch_core_session_get_read_impl(session, &read_impl);
+	// switch_core_session_get_read_impl(session, &read_impl);
 
-	if (!(pvt = switch_core_session_alloc(session, sizeof(*pvt)))) {
-		return SWITCH_STATUS_MEMERR;
-	}
+	if (!(pvt = switch_core_session_alloc(session, sizeof(*pvt)))) { return SWITCH_STATUS_MEMERR; }
 
 	pvt->session = session;
-	pvt->tdd_state = v18_init(NULL, FALSE, get_v18_mode(session), V18_AUTOMODING_GLOBAL, put_text_msg, pvt);
+	pvt->tdd_state = v18_init(NULL, FALSE, get_v18_mode(session), V18_AUTOMODING_GLOBAL, put_text_msg, pvt, NULL, NULL);
 
-	if ((status = switch_core_media_bug_add(session, "spandsp_tdd_decode", NULL,
-						tdd_decode_callback, pvt, 0, SMBF_READ_REPLACE | SMBF_NO_PAUSE, &bug)) != SWITCH_STATUS_SUCCESS) {
+	if ((status = switch_core_media_bug_add(session, "spandsp_tdd_decode", NULL, tdd_decode_callback, pvt, 0,
+											SMBF_READ_REPLACE | SMBF_NO_PAUSE, &bug)) != SWITCH_STATUS_SUCCESS) {
 		v18_free(pvt->tdd_state);
 		return status;
 	}
@@ -351,7 +320,7 @@ switch_status_t spandsp_tdd_decode_session(switch_core_session_t *session)
 	return SWITCH_STATUS_SUCCESS;
 }
 
-///XXX
+/// XXX
 
 typedef struct {
 	switch_core_session_t *session;
@@ -378,7 +347,8 @@ static void spandsp_dtmf_rx_realtime_callback(void *user_data, int code, int lev
 		/* prevent duplicate DTMF */
 		if (digit != pvt->last_digit || (pvt->samples - pvt->last_digit_end) > pvt->min_dup_digit_spacing) {
 			switch_dtmf_t dtmf = {0};
-			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(pvt->session), SWITCH_LOG_DEBUG, "DTMF BEGIN DETECTED: [%c]\n", digit);
+			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(pvt->session), SWITCH_LOG_DEBUG, "DTMF BEGIN DETECTED: [%c]\n",
+							  digit);
 			pvt->last_digit = digit;
 			dtmf.digit = digit;
 			dtmf.duration = switch_core_default_dtmf_duration(0);
@@ -386,22 +356,24 @@ static void spandsp_dtmf_rx_realtime_callback(void *user_data, int code, int lev
 			switch_channel_queue_dtmf(switch_core_session_get_channel(pvt->session), &dtmf);
 			pvt->digit_begin = pvt->samples;
 		} else {
-			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(pvt->session), SWITCH_LOG_DEBUG, "DUP DTMF DETECTED: [%c]\n", digit);
+			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(pvt->session), SWITCH_LOG_DEBUG, "DUP DTMF DETECTED: [%c]\n",
+							  digit);
 			pvt->last_digit_end = pvt->samples;
 		}
 	} else {
-		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(pvt->session), SWITCH_LOG_DEBUG, "DTMF END DETECTED: [%c], duration = %u ms\n", pvt->last_digit, (pvt->samples - pvt->digit_begin) / 8);
+		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(pvt->session), SWITCH_LOG_DEBUG,
+						  "DTMF END DETECTED: [%c], duration = %u ms\n", pvt->last_digit,
+						  (pvt->samples - pvt->digit_begin) / 8);
 		pvt->last_digit_end = pvt->samples;
 	}
 }
 
 static switch_bool_t inband_dtmf_callback(switch_media_bug_t *bug, void *user_data, switch_abc_type_t type)
 {
-	switch_inband_dtmf_t *pvt = (switch_inband_dtmf_t *) user_data;
+	switch_inband_dtmf_t *pvt = (switch_inband_dtmf_t *)user_data;
 	switch_frame_t *frame = NULL;
 	switch_core_session_t *session = switch_core_media_bug_get_session(bug);
-	switch_codec_implementation_t read_impl = { 0 };
-
+	switch_codec_implementation_t read_impl = {0};
 
 	switch (type) {
 	case SWITCH_ABC_TYPE_INIT: {
@@ -410,23 +382,22 @@ static switch_bool_t inband_dtmf_callback(switch_media_bug_t *bug, void *user_da
 			mod_spandsp_log_data_t *log_data = switch_core_session_alloc(pvt->session, sizeof(*log_data));
 			log_data->session = pvt->session;
 			log_data->verbose_log_level = spandsp_globals.verbose_log_level;
-			span_log_set_message_handler(dtmf_rx_get_logging_state(pvt->dtmf_detect), mod_spandsp_log_message, log_data);
+			span_log_set_message_handler(dtmf_rx_get_logging_state(pvt->dtmf_detect), mod_spandsp_log_message,
+										 log_data);
 		}
 		if (pvt->verbose) {
-			span_log_set_level(dtmf_rx_get_logging_state(pvt->dtmf_detect), SPAN_LOG_SHOW_SEVERITY | SPAN_LOG_SHOW_PROTOCOL | SPAN_LOG_FLOW);
+			span_log_set_level(dtmf_rx_get_logging_state(pvt->dtmf_detect),
+							   SPAN_LOG_SHOW_SEVERITY | SPAN_LOG_SHOW_PROTOCOL | SPAN_LOG_FLOW);
 		}
-		dtmf_rx_parms(pvt->dtmf_detect, pvt->filter_dialtone, (float)pvt->twist, (float)pvt->reverse_twist, (float)pvt->threshold);
+		dtmf_rx_parms(pvt->dtmf_detect, pvt->filter_dialtone, (float)pvt->twist, (float)pvt->reverse_twist,
+					  (float)pvt->threshold);
 		dtmf_rx_set_realtime_callback(pvt->dtmf_detect, spandsp_dtmf_rx_realtime_callback, pvt);
 		break;
 	}
 	case SWITCH_ABC_TYPE_CLOSE:
-		if (pvt->dtmf_detect) {
-			dtmf_rx_free(pvt->dtmf_detect);
-		}
+		if (pvt->dtmf_detect) { dtmf_rx_free(pvt->dtmf_detect); }
 
-		if (pvt->resampler) {
-			switch_resample_destroy(&pvt->resampler);
-		}
+		if (pvt->resampler) { switch_resample_destroy(&pvt->resampler); }
 
 		break;
 	case SWITCH_ABC_TYPE_READ_REPLACE:
@@ -446,27 +417,22 @@ static switch_bool_t inband_dtmf_callback(switch_media_bug_t *bug, void *user_da
 			if (read_impl.number_of_channels != 1) {
 				uint32_t rlen = frame->datalen / 2 / read_impl.number_of_channels;
 
-				switch_mux_channels((int16_t *) dp, rlen, read_impl.number_of_channels, 1);
+				switch_mux_channels((int16_t *)dp, rlen, read_impl.number_of_channels, 1);
 				datalen = rlen * 2 * 1;
 				samples = datalen / 2;
 			}
 
 			if (read_impl.actual_samples_per_second != 8000) {
 				if (!pvt->resampler) {
-					if (switch_resample_create(&pvt->resampler,
-											   read_impl.actual_samples_per_second,
-											   8000,
+					if (switch_resample_create(&pvt->resampler, read_impl.actual_samples_per_second, 8000,
 											   8 * (read_impl.microseconds_per_packet / 1000) * 2,
-											   SWITCH_RESAMPLE_QUALITY,
-											   1) != SWITCH_STATUS_SUCCESS) {
+											   SWITCH_RESAMPLE_QUALITY, 1) != SWITCH_STATUS_SUCCESS) {
 						switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to allocate resampler\n");
 						return SWITCH_FALSE;
 					}
 				}
 
-
-
-				switch_resample_process(pvt->resampler, dp, (int) datalen / 2 / 1);
+				switch_resample_process(pvt->resampler, dp, (int)datalen / 2 / 1);
 				memcpy(dp, pvt->resampler->to, pvt->resampler->to_len * 2 * 1);
 				samples = pvt->resampler->to_len;
 			}
@@ -502,14 +468,12 @@ switch_status_t spandsp_inband_dtmf_session(switch_core_session_t *session)
 	switch_media_bug_t *bug;
 	switch_status_t status;
 	switch_inband_dtmf_t *pvt;
-	switch_codec_implementation_t read_impl = { 0 };
+	switch_codec_implementation_t read_impl = {0};
 	const char *value;
 
 	switch_core_session_get_read_impl(session, &read_impl);
 
-	if (!(pvt = switch_core_session_alloc(session, sizeof(*pvt)))) {
-		return SWITCH_STATUS_MEMERR;
-	}
+	if (!(pvt = switch_core_session_alloc(session, sizeof(*pvt)))) { return SWITCH_STATUS_MEMERR; }
 
 	pvt->session = session;
 
@@ -519,7 +483,8 @@ switch_status_t spandsp_inband_dtmf_session(switch_core_session_t *session)
 	if (!zstr(value) && switch_is_number(value)) {
 		int val = atoi(value) * 8; /* convert from ms to samples */
 		if (val < 0) {
-			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "min_dup_digit_spacing_ms must be >= 0\n");
+			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR,
+							  "min_dup_digit_spacing_ms must be >= 0\n");
 		} else {
 			pvt->min_dup_digit_spacing = val;
 		}
@@ -530,7 +495,8 @@ switch_status_t spandsp_inband_dtmf_session(switch_core_session_t *session)
 	if (!zstr(value) && switch_is_number(value)) {
 		int val = atoi(value);
 		if (val < -99) {
-			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "spandsp_dtmf_rx_threshold must be >= -99 dBm0\n");
+			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR,
+							  "spandsp_dtmf_rx_threshold must be >= -99 dBm0\n");
 		} else {
 			pvt->threshold = val;
 		}
@@ -541,7 +507,8 @@ switch_status_t spandsp_inband_dtmf_session(switch_core_session_t *session)
 	if (!zstr(value) && switch_is_number(value)) {
 		int val = atoi(value);
 		if (val < 0) {
-			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "spandsp_dtmf_rx_twist must be >= 0 dB\n");
+			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR,
+							  "spandsp_dtmf_rx_twist must be >= 0 dB\n");
 		} else {
 			pvt->twist = val;
 		}
@@ -552,7 +519,8 @@ switch_status_t spandsp_inband_dtmf_session(switch_core_session_t *session)
 	if (!zstr(value) && switch_is_number(value)) {
 		int val = atoi(value);
 		if (val < 0) {
-			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "spandsp_dtmf_rx_reverse_twist must be >= 0 dB\n");
+			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR,
+							  "spandsp_dtmf_rx_reverse_twist must be >= 0 dB\n");
 		} else {
 			pvt->reverse_twist = val;
 		}
@@ -566,16 +534,13 @@ switch_status_t spandsp_inband_dtmf_session(switch_core_session_t *session)
 		pvt->filter_dialtone = 0;
 	}
 
-	if ((value = switch_channel_get_variable(channel, "dtmf_verbose"))) {
-		pvt->verbose = switch_true(value);
-	}
+	if ((value = switch_channel_get_variable(channel, "dtmf_verbose"))) { pvt->verbose = switch_true(value); }
 
-	if (switch_channel_pre_answer(channel) != SWITCH_STATUS_SUCCESS) {
-		return SWITCH_STATUS_FALSE;
-	}
+	if (switch_channel_pre_answer(channel) != SWITCH_STATUS_SUCCESS) { return SWITCH_STATUS_FALSE; }
 
-	if ((status = switch_core_media_bug_add(session, "spandsp_dtmf_detect", NULL,
-						inband_dtmf_callback, pvt, 0, SMBF_READ_REPLACE | SMBF_NO_PAUSE | SMBF_ONE_ONLY, &bug)) != SWITCH_STATUS_SUCCESS) {
+	if ((status = switch_core_media_bug_add(session, "spandsp_dtmf_detect", NULL, inband_dtmf_callback, pvt, 0,
+											SMBF_READ_REPLACE | SMBF_NO_PAUSE | SMBF_ONE_ONLY, &bug)) !=
+		SWITCH_STATUS_SUCCESS) {
 		return status;
 	}
 
@@ -584,12 +549,8 @@ switch_status_t spandsp_inband_dtmf_session(switch_core_session_t *session)
 	return SWITCH_STATUS_SUCCESS;
 }
 
-
-
 /* private channel data */
 #define TONE_PRIVATE "mod_tone_detect_bug"
-
-
 
 /**
  * Tone detector
@@ -614,11 +575,14 @@ struct tone_detector {
 };
 typedef struct tone_detector tone_detector_t;
 
-static switch_status_t tone_detector_create(switch_core_session_t *session, tone_detector_t **detector, tone_descriptor_t *descriptor);
-static switch_bool_t tone_detector_process_buffer(tone_detector_t *detector, void *data, unsigned int len, const char **key);
+static switch_status_t tone_detector_create(switch_core_session_t *session, tone_detector_t **detector,
+											tone_descriptor_t *descriptor);
+static switch_bool_t tone_detector_process_buffer(tone_detector_t *detector, void *data, unsigned int len,
+												  const char **key);
 static void tone_detector_destroy(tone_detector_t *detector);
 
-static switch_bool_t callprogress_detector_process_buffer(switch_media_bug_t *bug, void *user_data, switch_abc_type_t type);
+static switch_bool_t callprogress_detector_process_buffer(switch_media_bug_t *bug, void *user_data,
+														  switch_abc_type_t type);
 
 /**
  * Allocate the tone descriptor
@@ -628,13 +592,12 @@ static switch_bool_t callprogress_detector_process_buffer(switch_media_bug_t *bu
  * @param memory_pool the pool to use
  * @return SWITCH_STATUS_SUCCESS if successful
  */
-switch_status_t tone_descriptor_create(tone_descriptor_t **descriptor, const char *name, switch_memory_pool_t *memory_pool)
+switch_status_t tone_descriptor_create(tone_descriptor_t **descriptor, const char *name,
+									   switch_memory_pool_t *memory_pool)
 {
 	tone_descriptor_t *ldescriptor = NULL;
 	ldescriptor = switch_core_alloc(memory_pool, sizeof(tone_descriptor_t));
-	if (!ldescriptor) {
-		return SWITCH_STATUS_FALSE;
-	}
+	if (!ldescriptor) { return SWITCH_STATUS_FALSE; }
 	memset(ldescriptor, 0, sizeof(tone_descriptor_t));
 	ldescriptor->name = switch_core_strdup(memory_pool, name);
 	ldescriptor->spandsp_tone_descriptor = super_tone_rx_make_descriptor(NULL);
@@ -666,14 +629,10 @@ void tone_descriptor_destroy(tone_descriptor_t *descriptor)
 int tone_descriptor_add_tone(tone_descriptor_t *descriptor, const char *key)
 {
 	int id = super_tone_rx_add_tone(descriptor->spandsp_tone_descriptor);
-	if (id >= MAX_TONES) {
-		return -1;
-	}
+	if (id >= MAX_TONES) { return -1; }
 	switch_set_string(descriptor->tone_keys[id], key);
 
-	if (id > descriptor->idx) {
-		descriptor->idx = id;
-	}
+	if (id > descriptor->idx) { descriptor->idx = id; }
 
 	return id;
 }
@@ -689,7 +648,8 @@ int tone_descriptor_add_tone(tone_descriptor_t *descriptor, const char *key)
  * @param max the maximum tone duration in ms
  * @return SWITCH_STATUS_SUCCESS if successful
  */
-switch_status_t tone_descriptor_add_tone_element(tone_descriptor_t *descriptor, int tone_id, int freq1, int freq2, int min, int max)
+switch_status_t tone_descriptor_add_tone_element(tone_descriptor_t *descriptor, int tone_id, int freq1, int freq2,
+												 int min, int max)
 {
 	if (super_tone_rx_add_element(descriptor->spandsp_tone_descriptor, tone_id, freq1, freq2, min, max) == 0) {
 		return SWITCH_STATUS_SUCCESS;
@@ -709,7 +669,8 @@ static void tone_report_callback(void *user_data, int code, int level, int delay
 {
 	tone_detector_t *detector = (tone_detector_t *)user_data;
 	if (detector->debug > 0) {
-		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(detector->session), SWITCH_LOG_DEBUG, "Tone report: code = %d, level = %d, delay = %d\n", code, level, delay);
+		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(detector->session), SWITCH_LOG_DEBUG,
+						  "Tone report: code = %d, level = %d, delay = %d\n", code, level, delay);
 	}
 	detector->detected_tone = code;
 }
@@ -726,7 +687,8 @@ static void tone_segment_callback(void *user_data, int f1, int f2, int duration)
 {
 	tone_detector_t *detector = (tone_detector_t *)user_data;
 	if (detector->debug > 1) {
-		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(detector->session), SWITCH_LOG_DEBUG, "Tone segment: f1 = %d, f2 = %d, duration = %d\n", f1, f2, duration);
+		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(detector->session), SWITCH_LOG_DEBUG,
+						  "Tone segment: f1 = %d, f2 = %d, duration = %d\n", f1, f2, duration);
 	}
 }
 
@@ -743,9 +705,7 @@ static tone_descriptor_t *tone_descriptor_dup(tone_descriptor_t *descriptor, swi
 	int t = 0, s = 0, tone_count = 0;
 
 	if (descriptor && pool) {
-		if (tone_descriptor_create(&desc, descriptor->name, pool) != SWITCH_STATUS_SUCCESS) {
-			return NULL;
-		}
+		if (tone_descriptor_create(&desc, descriptor->name, pool) != SWITCH_STATUS_SUCCESS) { return NULL; }
 
 		tone_count = descriptor->idx + 1;
 
@@ -781,7 +741,8 @@ static tone_descriptor_t *tone_descriptor_dup(tone_descriptor_t *descriptor, swi
  * @param memory_pool the pool to use
  * @return SWITCH_STATUS_SUCCESS if successful
  */
-static switch_status_t tone_detector_create(switch_core_session_t *session, tone_detector_t **detector, tone_descriptor_t *descriptor)
+static switch_status_t tone_detector_create(switch_core_session_t *session, tone_detector_t **detector,
+											tone_descriptor_t *descriptor)
 {
 	tone_detector_t *ldetector = switch_core_session_alloc(session, sizeof(tone_detector_t));
 
@@ -799,7 +760,8 @@ static switch_status_t tone_detector_create(switch_core_session_t *session, tone
  */
 static void tone_detector_init(tone_detector_t *detector)
 {
-	detector->spandsp_detector = super_tone_rx_init(NULL, detector->descriptor->spandsp_tone_descriptor, tone_report_callback, detector);
+	detector->spandsp_detector =
+		super_tone_rx_init(NULL, detector->descriptor->spandsp_tone_descriptor, tone_report_callback, detector);
 	super_tone_rx_segment_callback(detector->spandsp_detector, tone_segment_callback);
 }
 
@@ -811,12 +773,14 @@ static void tone_detector_init(tone_detector_t *detector)
  * @param key the found tone key
  * @return SWITCH_TRUE if a tone was found
  */
-static switch_bool_t tone_detector_process_buffer(tone_detector_t *detector, void *data, unsigned int len, const char **key)
+static switch_bool_t tone_detector_process_buffer(tone_detector_t *detector, void *data, unsigned int len,
+												  const char **key)
 {
 	detector->detected_tone = -1;
 	super_tone_rx(detector->spandsp_detector, data, len);
 
-	if (detector->detected_tone > -1 && detector->detected_tone <= detector->descriptor->idx && detector->detected_tone < MAX_TONES) {
+	if (detector->detected_tone > -1 && detector->detected_tone <= detector->descriptor->idx &&
+		detector->detected_tone < MAX_TONES) {
 		*key = detector->descriptor->tone_keys[detector->detected_tone];
 		return SWITCH_TRUE;
 	}
@@ -858,9 +822,7 @@ switch_status_t callprogress_detector_start(switch_core_session_t *session, cons
 
 	/* are we already running? */
 	bug = switch_channel_get_private(channel, TONE_PRIVATE);
-	if (bug) {
-		return SWITCH_STATUS_FALSE;
-	}
+	if (bug) { return SWITCH_STATUS_FALSE; }
 
 	switch_mutex_lock(spandsp_globals.mutex);
 	/* find the tone descriptor with the matching name and create the detector */
@@ -868,7 +830,8 @@ switch_status_t callprogress_detector_start(switch_core_session_t *session, cons
 
 	if (!descriptor) {
 		switch_mutex_unlock(spandsp_globals.mutex);
-		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_WARNING, "no tone descriptor defined with name '%s'.  Update configuration. \n", name);
+		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_WARNING,
+						  "no tone descriptor defined with name '%s'.  Update configuration. \n", name);
 		return SWITCH_STATUS_FALSE;
 	}
 
@@ -876,12 +839,11 @@ switch_status_t callprogress_detector_start(switch_core_session_t *session, cons
 	switch_mutex_unlock(spandsp_globals.mutex);
 
 	/* start listening for tones */
-	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "Starting tone detection for '%s'\n", name);
-	switch_core_media_bug_add(session, "spandsp_tone_detect", NULL,
-				callprogress_detector_process_buffer, detector, 0 /* stop time */, SMBF_READ_REPLACE, &bug);
-	if (!bug) {
-		return SWITCH_STATUS_FALSE;
-	}
+	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "Starting tone detection for '%s'\n",
+					  name);
+	switch_core_media_bug_add(session, "spandsp_tone_detect", NULL, callprogress_detector_process_buffer, detector,
+							  0 /* stop time */, SMBF_READ_REPLACE, &bug);
+	if (!bug) { return SWITCH_STATUS_FALSE; }
 	switch_channel_set_private(channel, TONE_PRIVATE, bug);
 
 	return SWITCH_STATUS_SUCCESS;
@@ -895,18 +857,18 @@ switch_status_t callprogress_detector_start(switch_core_session_t *session, cons
  * @param type the type of data available from the bug
  * @return SWITCH_TRUE
  */
-static switch_bool_t callprogress_detector_process_buffer(switch_media_bug_t *bug, void *user_data, switch_abc_type_t type)
+static switch_bool_t callprogress_detector_process_buffer(switch_media_bug_t *bug, void *user_data,
+														  switch_abc_type_t type)
 {
 	tone_detector_t *detector = (tone_detector_t *)user_data;
 	switch_core_session_t *session = detector->session;
 
-	switch(type) {
+	switch (type) {
 	case SWITCH_ABC_TYPE_INIT:
 		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "initializing tone detector\n");
 		tone_detector_init(detector);
 		break;
-	case SWITCH_ABC_TYPE_READ_REPLACE:
-	{
+	case SWITCH_ABC_TYPE_READ_REPLACE: {
 		switch_frame_t *frame;
 		const char *detected_tone = NULL;
 		if (!detector->spandsp_detector) {
@@ -921,14 +883,18 @@ static switch_bool_t callprogress_detector_process_buffer(switch_media_bug_t *bu
 		if (detected_tone) {
 			switch_event_t *event = NULL;
 			switch_channel_t *channel = switch_core_session_get_channel(session);
-			const char *execute_on_tone_var = switch_core_session_sprintf(session, "execute_on_spandsp_tone_detect_%s", detected_tone);
-			const char *api_on_tone_var = switch_core_session_sprintf(session, "api_on_spandsp_tone_detect_%s", detected_tone);
-			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "DETECTED TONE: %s\n", detected_tone);
+			const char *execute_on_tone_var =
+				switch_core_session_sprintf(session, "execute_on_spandsp_tone_detect_%s", detected_tone);
+			const char *api_on_tone_var =
+				switch_core_session_sprintf(session, "api_on_spandsp_tone_detect_%s", detected_tone);
+			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "DETECTED TONE: %s\n",
+							  detected_tone);
 			switch_channel_execute_on(channel, execute_on_tone_var);
 			switch_channel_api_on(channel, api_on_tone_var);
 			if (switch_event_create(&event, SWITCH_EVENT_DETECTED_TONE) == SWITCH_STATUS_SUCCESS) {
 				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Detected-Tone", detected_tone);
-				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Unique-ID", switch_core_session_get_uuid(session));
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Unique-ID",
+											   switch_core_session_get_uuid(session));
 				switch_channel_event_set_data(channel, event);
 				switch_event_fire(&event);
 			}
@@ -979,11 +945,7 @@ switch_status_t mod_spandsp_dsp_load(switch_loadable_module_interface_t **module
 /**
  * Called when FreeSWITCH stops the module
  */
-void mod_spandsp_dsp_shutdown(void)
-{
-	return;
-}
-
+void mod_spandsp_dsp_shutdown(void) { return; }
 
 /* For Emacs:
  * Local Variables:
