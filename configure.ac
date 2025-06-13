@@ -2093,6 +2093,7 @@ AC_CONFIG_FILES([Makefile
 		src/Makefile
 		src/mod/Makefile
 		src/mod/applications/mod_abstraction/Makefile
+    src/mod/applications/mod_amd/Makefile
 		src/mod/applications/mod_avmd/Makefile
 		src/mod/applications/mod_bert/Makefile
 		src/mod/applications/mod_blacklist/Makefile
