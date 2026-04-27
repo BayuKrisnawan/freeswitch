@@ -1,5 +1,5 @@
 [submodule "mod_amd"]
 	path = src/mod/applications/mod_amd
-	url = https://github.com/webitel/mod_amd
+	url = https://github.com/BayuKrisnawan/mod_amd.git
 [submodule "src/mod/applications/mod_amd"]
 	url = https://github.com/BayuKrisnawan/mod_amd.git
